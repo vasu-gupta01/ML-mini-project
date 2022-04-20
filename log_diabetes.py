@@ -49,8 +49,8 @@ def predict(X, W, t=None):
     return y, t_hat, loss, acc
 
 
-def train(X_train, y_train, X_val, t_val, N_class, batch_size=500, alpha=0.1, 
-          MaxEpoch=50, decay=0.):
+def train(X_train, y_train, X_val, t_val, N_class, batch_size=100, alpha=0.1, 
+          MaxEpoch=10, decay=0.):
     N_train = X_train.shape[0]
     N_val = X_val.shape[0]
     
@@ -63,14 +63,14 @@ def train(X_train, y_train, X_val, t_val, N_class, batch_size=500, alpha=0.1,
     epoch_best = 0
     acc_best = 0
     
-    print('Running Stochastic Gradient Descent...')
     b_arr = np.arange(int(np.ceil(N_train/batch_size)))
     for epoch in range(MaxEpoch):
+        print('Epoch ' + str(epoch+1) + '/' + str(MaxEpoch))
         loss_this_epoch = 0
         # np.random.shuffle(b_arr) # Testing meaningful hypothesis here.
         for b in b_arr:
-            X_batch = X_train[b*batch_size: (b+1)*batch_size,:]
-            y_batch = y_train[b*batch_size: (b+1)*batch_size,:]
+            X_batch = X_train[b*batch_size: (b+1)*batch_size]
+            y_batch = y_train[b*batch_size: (b+1)*batch_size]
             
             
             y_hat_batch, t_hat_batch, loss_batch, acc_batch = predict(X_batch, 
@@ -92,9 +92,9 @@ def train(X_train, y_train, X_val, t_val, N_class, batch_size=500, alpha=0.1,
         loss_this_epoch = loss_this_epoch / (int(np.ceil(N_train/batch_size)))
         train_losses.append(loss_this_epoch)
         
-        _, _, _, acc = predict(X_val, W, t_val)
+        _, _, val_loss, acc = predict(X_val, W, t_val)
         valid_accs.append(acc)
-        
+        print('val_loss: '+ str(val_loss) + ', val_accuracy: '+ str(acc))
         
         if acc > acc_best:
             acc_best = acc

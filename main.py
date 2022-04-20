@@ -4,86 +4,95 @@ Created on Sat Apr 16 15:58:46 2022
 
 @author: Punar Vasu Gupta
 """
+
 import numpy as np
+import tensorflow as tf
+import pandas as pd
 import log_diabetes
 import lin_diabetes
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import confusion_matrix
+import seaborn as sns
 import matplotlib.pyplot as plt
-
-def readData():
-    data = np.genfromtxt('data/diabetes_binary_health_indicators_BRFSS2015.csv'
-                         , delimiter=',', skip_header=1)
     
-    random_data = np.arange(len(data))
-    np.random.shuffle(random_data)
-    data = data[random_data]
-    
-    train_data = data[:100000,:]
-    random_train = np.arange(len(train_data))
-    np.random.shuffle(random_train)
-    train_data = train_data[random_train]
-    X_train = train_data[:, 1:]
-    X_train = np.concatenate(
-        (np.ones([X_train.shape[0], 1]), X_train), axis=1)
-    t_train = train_data[:, 1]
-    t_train = t_train.reshape([len(t_train),1]) 
-    
-    val_data = data[100000:110000,:]
-    random_val = np.arange(len(val_data))
-    np.random.shuffle(random_val)
-    val_data = val_data[random_val]
-    X_val = val_data[:, 1:]
-    X_val = np.concatenate(
-        (np.ones([X_val.shape[0], 1]), X_val), axis=1)
-    t_val = val_data[:, 1]
-    t_val = t_val.reshape([len(t_val),1])
-    
-    
-    test_data = data[110000:120000,:]
-    random_test = np.arange(len(test_data))
-    np.random.shuffle(random_test)
-    test_data = test_data[random_test]
-    X_test = test_data[:, 1:]
-    X_test = np.concatenate(
-        (np.ones([X_test.shape[0], 1]), X_test), axis=1)
-    t_test = test_data[:, 1]
-    t_test = t_test.reshape([len(t_test),1])
-    
-    return X_train, t_train, X_val, t_val, X_test, t_test
-    
-
-def get_accuracy(t, t_hat):
-    """
-    Calculate accuracy,
-    """
-    return np.sum(t==t_hat)/np.size(t)
 
 def main():
-    X_train, t_train, X_val, t_val, X_test, t_test = readData()
+    # Please download dataset into 'data\' from here: 
+    # https://drive.google.com/file/d/1poNImi3SGcIX0FQs_0-8qnBXxA2LDWfY/view?usp=sharing    
+    df = pd.read_csv('data/creditcard.csv')
+    df = df.copy().drop('Time', axis=1)
+    features = df.iloc[:, :-1]
+    labels = df.iloc[:, -1]
+
+    X_train, X_test, y_train, y_test = train_test_split(features, labels, test_size=0.2, 
+                    stratify=labels, random_state=0)
+    X_train, X_val, y_train, y_val = train_test_split(X_train, 
+            y_train, test_size=0.25, random_state=0)
+
+    MaxEpoch = 10
     
-    print(X_train.shape, t_train.shape, X_val.shape, t_val.shape, X_test.shape,
-          t_test.shape)
+    # Conversions & Normalizing
+    nX_train = X_train.to_numpy()
+    nX_train = (nX_train - np.mean(nX_train, axis=0)) / np.std(nX_train, axis=0)
+    ny_train = y_train.to_numpy()
+    ny_train = ny_train.reshape([len(ny_train),1])
     
-    MaxEpoch = 50
+    nX_val = X_val.to_numpy()
+    nX_val = (nX_val - np.mean(nX_val, axis=0)) / np.std(nX_val, axis=0)
+    ny_val = y_val.to_numpy()
+    ny_val = ny_val.reshape([len(ny_val),1])
+    
+    nX_test = X_test.to_numpy()
+    nX_test = (nX_test - np.mean(nX_test, axis=0)) / np.std(nX_test, axis=0)
+    ny_test = y_test.to_numpy()
+    ny_test = ny_test.reshape([len(ny_test),1])
+    
+    print(nX_train.shape, ny_train.shape, nX_val.shape, ny_val.shape, nX_test.shape,
+          ny_test.shape)
     
     # Linear Regression
-    lin_w_best = lin_diabetes.train(X_train, t_train)
-    t_hat = lin_diabetes.predict(X_test, lin_w_best)
+    print('Training Linear Regression...')
+    lin_w_best, lin_epoch_best, _, _, _ , val_acc= lin_diabetes.train(
+        nX_train, ny_train, 
+        nX_val, ny_val)
+    print('Done.')
     
-    lin_accuracy = np.sum(t_test==t_hat)/np.size(t_test)
+    # Test Performance
+    print('Linear Regression epoch_best = ', lin_epoch_best)
+    t_hat, _, lin_risk, lin_accuracy = lin_diabetes.predict(
+        nX_test, lin_w_best, ny_test)
+    print('Linear Regression Risk = ', lin_risk)
     print('Linear Regression Accuracy = ', lin_accuracy)
+    # plot results
+    plt.figure()
+    plt.plot(range(50), val_acc)
+    plt.xlabel('epoch')
+    plt.ylabel('Validation Accuracy')
+    plt.savefig('LinValidation_Accuracy.png')
+    
+    t_hat = t_hat > 0.5
+    mat = confusion_matrix(y_test, t_hat)   # construct confusion matrix
+    labels = ['Legitimate', 'Fraudulent']
+    
+    # plot confusion matrix as heat map
+    sns.heatmap(mat, square=True, annot=True, fmt='d', cbar=False, cmap='OrRd',
+                xticklabels=labels, yticklabels=labels)
+    
+    plt.xlabel('Predicted label')
+    plt.ylabel('Actual label')
+    plt.savefig('LinConsfusion.png')
     
     
+    # Softmax Regression
+    print('Training Softmax Regression...')
     epoch_best, acc_best,  W_best, train_losses, valid_accs = log_diabetes.train(
-        X_train, t_train, X_val, t_val, 3)
+        nX_train, ny_train, 
+        nX_val, ny_val, 2)
+    print('Done.')
     print('epoch_best = ', epoch_best)
     print('Validation Accuracy = ', acc_best)
     
-    plt.figure()
-    plt.plot(range(MaxEpoch), train_losses)
-    plt.xlabel('epoch')
-    plt.ylabel('Training Cross-Entropy Loss')
-    plt.savefig('Training_Loss.png')
-
+    # Plot Results
     plt.figure()
     plt.plot(range(MaxEpoch), valid_accs)
     plt.xlabel('epoch')
@@ -92,9 +101,57 @@ def main():
     
     # Test Performance
     print('Evaluating Test Performance...')
-    y_hat, test_preds, _, acc_test = log_diabetes.predict(X_test, W_best, t_test)
+    y_hat, test_preds, _, acc_test = log_diabetes.predict(nX_test, W_best, ny_test)
     print('Test Accuracy = ', acc_test)
     
+    test_preds = test_preds.argmax(axis=1)     # 1 = fraud, 0 = legitimate
+    mat = confusion_matrix(y_test, test_preds)   # construct confusion matrix
+    labels = ['Legitimate', 'Fraudulent']
+    
+    # plot confusion matrix as heat map
+    sns.heatmap(mat, square=True, annot=True, fmt='d', cbar=False, cmap='OrRd',
+                xticklabels=labels, yticklabels=labels)
+    
+    plt.xlabel('Predicted label')
+    plt.ylabel('Actual label')
+    plt.savefig('SoftmConsfusion.png')
+    
+    # Neural Network
+    model = tf.keras.models.Sequential([
+        tf.keras.layers.Dense(128, activation='relu'),
+        tf.keras.layers.Dense(1, activation='sigmoid')
+    ])
+
+    model.compile(
+        loss='binary_crossentropy',
+        optimizer='adam',
+        metrics="accuracy"
+    )
+
+    history = model.fit(X_train, y_train, epochs=10,
+                validation_data=(X_test, y_test), batch_size=100)
+    
+    nn_acc = history.history['val_accuracy']
+    # Plot Results
+    plt.figure()
+    plt.plot(range(MaxEpoch), nn_acc)
+    plt.xlabel('epoch')
+    plt.ylabel('Validation Accuracy')
+    plt.savefig('NNValidation_Accuracy.png')
+    
+    # Based on the example by jeffprosise, we construct a confusion matrix due to the highly unbalanced data:
+    # https://github.com/jeffprosise/Deep-Learning/blob/master/Fraud%20Detection.ipynb
+    y_hat = model.predict(X_test) > 0.5     # 1 = fraud, 0 = legitimate
+    mat = confusion_matrix(y_test, y_hat)   # construct confusion matrix
+    labels = ['Legitimate', 'Fraudulent']
+    
+    # plot confusion matrix as heat map
+    sns.heatmap(mat, square=True, annot=True, fmt='d', cbar=False, cmap='OrRd',
+                xticklabels=labels, yticklabels=labels)
+    
+    plt.xlabel('Predicted label')
+    plt.ylabel('Actual label')
+    plt.savefig('NNConsfusion.png')
 
 if __name__ == "__main__":
     main()
